@@ -25,6 +25,8 @@ export type InboundEvent = {
     kind: string;
     externalEventId: string;
     externalMessageId?: string;
+    /** e.g. Telegram reply_to_message.message_id */
+    replyToExternalMessageId?: string;
     occurredAt: string;
     text?: string;
     raw?: unknown;
@@ -48,7 +50,25 @@ export type InboundCapability = {
 
 export type ChannelTarget = { externalChatId: string };
 
-export type OutboundPayload = { kind: "text"; text: string };
+export type OutboundTextPayload = {
+  kind: "text";
+  text: string;
+  /** e.g. provider reply-to / thread id */
+  replyToExternalMessageId?: string;
+};
+
+/** Set or clear a reaction on an existing channel message (driver maps to provider API). */
+export type OutboundReactionPayload = {
+  kind: "reaction";
+  externalMessageId: string;
+  /**
+   * One standard emoji (Unicode). Empty string means remove reactions set by this bot on that message
+   * (provider-specific; Telegram uses an empty reaction list).
+   */
+  emoji: string;
+};
+
+export type OutboundPayload = OutboundTextPayload | OutboundReactionPayload;
 
 export type SendResult = { ok: boolean };
 

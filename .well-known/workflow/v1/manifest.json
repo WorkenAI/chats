@@ -1,0 +1,162 @@
+{
+  "version": "1.0.0",
+  "steps": {
+    "node_modules/workflow/dist/stdlib.js": {
+      "fetch": {
+        "stepId": "step//workflow@4.2.0-beta.72//fetch"
+      }
+    },
+    "workflows/channel-agent-turn.ts": {
+      "tools/send_chat_message/execute": {
+        "stepId": "step//./workflows/channel-agent-turn//runChannelAgentTurn/tools/send_chat_message/execute"
+      }
+    },
+    "workflows/web-chat-turn.ts": {
+      "tools/send_chat_message/execute": {
+        "stepId": "step//./workflows/web-chat-turn//runWebChatTurn/tools/send_chat_message/execute"
+      }
+    },
+    "node_modules/@workflow/ai/dist/providers/gateway.js": {
+      "_anonymousStep0": {
+        "stepId": "step//@workflow/ai/gateway@4.1.0-beta.58//_anonymousStep0"
+      }
+    },
+    "node_modules/@workflow/ai/dist/agent/do-stream-step.js": {
+      "doStreamStep": {
+        "stepId": "step//@workflow/ai@4.1.0-beta.58//doStreamStep"
+      }
+    },
+    "node_modules/@workflow/ai/dist/agent/stream-text-iterator.js": {
+      "writeToolOutputToUI": {
+        "stepId": "step//@workflow/ai@4.1.0-beta.58//writeToolOutputToUI"
+      }
+    },
+    "node_modules/@workflow/ai/dist/agent/durable-agent.js": {
+      "closeStream": {
+        "stepId": "step//@workflow/ai/agent@4.1.0-beta.58//closeStream"
+      },
+      "convertChunksToUIMessages": {
+        "stepId": "step//@workflow/ai/agent@4.1.0-beta.58//convertChunksToUIMessages"
+      },
+      "writeFinishChunk": {
+        "stepId": "step//@workflow/ai/agent@4.1.0-beta.58//writeFinishChunk"
+      }
+    },
+    "node_modules/workflow/dist/internal/builtins.js": {
+      "__builtin_response_array_buffer": {
+        "stepId": "__builtin_response_array_buffer"
+      },
+      "__builtin_response_json": {
+        "stepId": "__builtin_response_json"
+      },
+      "__builtin_response_text": {
+        "stepId": "__builtin_response_text"
+      }
+    }
+  },
+  "workflows": {
+    "workflows/channel-agent-turn.ts": {
+      "runChannelAgentTurn": {
+        "workflowId": "workflow//./workflows/channel-agent-turn//runChannelAgentTurn",
+        "graph": {
+          "nodes": [
+            {
+              "id": "start",
+              "type": "workflowStart",
+              "data": {
+                "label": "Start: runChannelAgentTurn",
+                "nodeKind": "workflow_start"
+              }
+            },
+            {
+              "id": "node_0",
+              "type": "agent",
+              "data": {
+                "label": "DurableAgent",
+                "nodeKind": "agent"
+              },
+              "metadata": {
+                "isStepReference": true,
+                "referenceContext": "DurableAgent"
+              }
+            },
+            {
+              "id": "end",
+              "type": "workflowEnd",
+              "data": {
+                "label": "Return",
+                "nodeKind": "workflow_end"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_start_node_0",
+              "source": "start",
+              "target": "node_0",
+              "type": "default"
+            },
+            {
+              "id": "e_node_0_end",
+              "source": "node_0",
+              "target": "end",
+              "type": "default"
+            }
+          ]
+        }
+      }
+    },
+    "workflows/web-chat-turn.ts": {
+      "runWebChatTurn": {
+        "workflowId": "workflow//./workflows/web-chat-turn//runWebChatTurn",
+        "graph": {
+          "nodes": [
+            {
+              "id": "start",
+              "type": "workflowStart",
+              "data": {
+                "label": "Start: runWebChatTurn",
+                "nodeKind": "workflow_start"
+              }
+            },
+            {
+              "id": "node_0",
+              "type": "agent",
+              "data": {
+                "label": "DurableAgent",
+                "nodeKind": "agent"
+              },
+              "metadata": {
+                "isStepReference": true,
+                "referenceContext": "DurableAgent"
+              }
+            },
+            {
+              "id": "end",
+              "type": "workflowEnd",
+              "data": {
+                "label": "Return",
+                "nodeKind": "workflow_end"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "e_start_node_0",
+              "source": "start",
+              "target": "node_0",
+              "type": "default"
+            },
+            {
+              "id": "e_node_0_end",
+              "source": "node_0",
+              "target": "end",
+              "type": "default"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "classes": {}
+}

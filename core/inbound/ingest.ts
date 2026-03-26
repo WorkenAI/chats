@@ -54,6 +54,9 @@ async function maybeStartChannelAgent(event: InboundEvent): Promise<void> {
     event.conversation.externalChatId,
     text,
     userMessageId,
+    event.event.replyToExternalMessageId != null
+      ? { replyToExternalMessageId: event.event.replyToExternalMessageId }
+      : undefined,
   );
 
   await start(runChannelAgentTurn, [

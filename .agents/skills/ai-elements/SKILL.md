@@ -105,6 +105,15 @@ export const MessageContent = ({
 );
 ```
 
+## Web chat reactions (this repo)
+
+The `/chat` UI composes **AI Elements** `Message`, `MessageContent`, and `MessageResponse` (`app/chat/agent-chat-panel.tsx`). Reactions are not a separate ai-elements package feature; they extend the same layout:
+
+- **Human → assistant:** Under each assistant bubble, a row of emoji buttons updates `data-chat-bubble` parts (`userReactions` on `AppWebUIMessage` / `WebChatDataTypes` in `core/agents/web-chat-ui-types.ts`) via `useChat`’s `setMessages`. Toggle the same emoji to remove it.
+- **Assistant → human:** The durable web workflow streams `data-chat-reaction` parts (`targetUserMessageId`, `emoji`). The UI aggregates them with `collectAgentReactionsOnUserMessage` and renders chips under the matching user `Message`.
+
+Model context includes reactions through `web-chat-model-parts.ts` (`userReactions` on bubble lines; `[Agent reaction …]` for streamed reactions). The workflow tool is `set_message_reaction` in `workflows/web-chat-turn.ts`.
+
 ## Troubleshooting
 
 ### Why are my components not styled?

@@ -105,7 +105,7 @@ sequenceDiagram
 
 ## Ключевые идеи
 
-- **Один inbound-route** на все установки: тип канала определяется по `connectorKind` и registry (`docs/ingress.md`).
+- **Один inbound-route** на все установки: тип канала определяется по `connectorKind` и registry ([`docs/ingress/generic-webhook-dispatch.md`](docs/ingress/generic-webhook-dispatch.md)).
 - **Очередь** буферизует нормализованные события (`inbound-events`), consumer вызывает ingest с ретраями.
 - **Агент** — два workflow с одной логикой: `runChannelAgentTurn` (Telegram) и `runWebChatTurn` (браузер); модель через **Vercel AI Gateway** (`gateway()`), тулы `send_chat_message` и `typing_pause` + `sleep()` из Workflow.
 
@@ -124,7 +124,7 @@ core/agents/                                       # инструкции аге
 drivers/                                           # telegram и др.
 workflows/channel-agent-turn.ts                    # агент → Telegram
 workflows/web-chat-turn.ts                         # агент → UI stream
-docs/                                              # заметки по ingress / workflow
+docs/                                              # architecture, runtime, product UX, ingress, workflow ([index](docs/README.md))
 tests/integration/                                 # реальный вызов Gateway (опционально)
 ```
 
@@ -149,5 +149,6 @@ bun run test:agent:local  # то же + .env.local
 
 ## Документация в репозитории
 
-- `docs/ingress.md` — generic webhook, registry, dispatch.
-- `docs/agent-workflow.md` — паттерн single-turn + DurableAgent.
+- [docs/README.md](docs/README.md) — оглавление.
+- [docs/ingress/generic-webhook-dispatch.md](docs/ingress/generic-webhook-dispatch.md) — единый webhook, registry, dispatch.
+- [docs/workflow/single-turn-agent.md](docs/workflow/single-turn-agent.md) — single-turn + DurableAgent.

@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { AgentUserMessageMetadata } from "@/core/agents/message-metadata";
 
 function key(installationId: string, externalChatId: string): string {
   return `${installationId}:${externalChatId}`;
@@ -20,12 +21,20 @@ export function appendUserMessage(
   externalChatId: string,
   text: string,
   messageId: string,
+  options?: { replyToExternalMessageId?: string },
 ): UIMessage[] {
   const k = key(installationId, externalChatId);
   const list = trim([...(messagesByConversation.get(k) ?? [])]);
+  const metadata: AgentUserMessageMetadata = {
+    externalMessageId: messageId,
+    ...(options?.replyToExternalMessageId != null
+      ? { replyToExternalMessageId: options.replyToExternalMessageId }
+      : {}),
+  };
   const msg: UIMessage = {
     id: messageId,
     role: "user",
+    metadata,
     parts: [{ type: "text", text }],
   };
   list.push(msg);

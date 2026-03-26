@@ -1,0 +1,16 @@
+{
+  "stepFiles": [
+    "/Users/rom/Documents/worken/chat/node_modules/@workflow/ai/dist/agent/do-stream-step.js",
+    "/Users/rom/Documents/worken/chat/node_modules/@workflow/ai/dist/agent/durable-agent.js",
+    "/Users/rom/Documents/worken/chat/node_modules/@workflow/ai/dist/agent/stream-text-iterator.js",
+    "/Users/rom/Documents/worken/chat/node_modules/@workflow/ai/dist/providers/gateway.js",
+    "/Users/rom/Documents/worken/chat/node_modules/workflow/dist/stdlib.js",
+    "/Users/rom/Documents/worken/chat/workflows/channel-agent-turn.ts",
+    "/Users/rom/Documents/worken/chat/workflows/web-chat-turn.ts"
+  ],
+  "workflowFiles": [
+    "/Users/rom/Documents/worken/chat/workflows/channel-agent-turn.ts",
+    "/Users/rom/Documents/worken/chat/workflows/web-chat-turn.ts"
+  ],
+  "serdeOnlyFiles": []
+}

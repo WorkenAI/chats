@@ -4,7 +4,9 @@ import { convertToModelMessages, tool, type UIMessage, type UIMessageChunk } fro
 import { getWritable, sleep } from "workflow";
 import { z } from "zod";
 import { CHANNEL_AGENT_INSTRUCTIONS } from "@/core/agents/channel-instructions";
+import { injectUserMessageContextForModel } from "@/core/agents/inject-user-message-context";
 import { appendAssistantBubble } from "@/core/conversations/store";
+import { optionalReplyToMessageIdSchema } from "@/core/agents/tool-schemas";
 import { dispatchOutbound } from "@/core/outbound/dispatch";
 
 export type ChannelAgentTurnInput = {
@@ -52,15 +54,55 @@ export async function runChannelAgentTurn(input: ChannelAgentTurnInput) {
           .min(1)
           .max(4096)
           .describe("A single short message bubble."),
+        replyToMessageId: optionalReplyToMessageIdSchema.describe(
+          "Optional id to thread this bubble (from [Conversation context] on the user message). Use exact values only.",
+        ),
       }),
-      execute: async ({ text }) => {
+      execute: async ({ text, replyToMessageId }) => {
         "use step";
         await dispatchOutbound({
           installationId,
           target: { externalChatId },
-          payload: { kind: "text", text },
+          payload: {
+            kind: "text",
+            text,
+            ...(replyToMessageId != null
+              ? { replyToExternalMessageId: replyToMessageId }
+              : {}),
+          },
         });
         appendAssistantBubble(installationId, externalChatId, text);
+        return { ok: true as const };
+      },
+    }),
+
+    set_message_reaction: tool({
+      description:
+        "Set or remove an emoji reaction on the user's message. Use the external message id from [Conversation context].",
+      inputSchema: z.object({
+        externalMessageId: z
+          .string()
+          .min(1)
+          .describe(
+            "Target message id from [Conversation context] (external message id line).",
+          ),
+        emoji: z
+          .string()
+          .describe(
+            "One standard emoji to set, or empty string to remove your reaction on that message.",
+          ),
+      }),
+      execute: async ({ externalMessageId, emoji }) => {
+        "use step";
+        await dispatchOutbound({
+          installationId,
+          target: { externalChatId },
+          payload: {
+            kind: "reaction",
+            externalMessageId,
+            emoji,
+          },
+        });
         return { ok: true as const };
       },
     }),
@@ -73,7 +115,9 @@ export async function runChannelAgentTurn(input: ChannelAgentTurnInput) {
   });
 
   await agent.stream({
-    messages: await convertToModelMessages(input.messages),
+    messages: await convertToModelMessages(
+      injectUserMessageContextForModel(input.messages),
+    ),
     writable,
     maxSteps: 28,
   });

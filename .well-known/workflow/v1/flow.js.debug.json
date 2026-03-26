@@ -1,0 +1,7 @@
+{
+  "workflowFiles": [
+    "/Users/rom/Documents/worken/chat/workflows/channel-agent-turn.ts",
+    "/Users/rom/Documents/worken/chat/workflows/web-chat-turn.ts"
+  ],
+  "serdeOnlyFiles": []
+}

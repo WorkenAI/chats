@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../export/shell-chat-ui/shell-chat-ui.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -47,39 +48,61 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Light theme: Worken OS — warm paper / sand, coffee typography, amber–bronze accents.
+ * Aligns with landing shell (`data-shell-theme="light"` + `html` without `.dark`).
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --primitive-title: #3b2313;
+    --primitive-subtitle: #5c4333;
+    --primitive-desc: #6b5344;
+    --brand-solid: #b98f68;
+    --glass-border: rgb(120 80 40 / 0.12);
+    --glass-bg: rgb(120 80 40 / 0.03);
+    --hero-title-gradient: linear-gradient(
+        135deg,
+        #5c4333 0%,
+        #8c7560 35%,
+        #d97706 70%,
+        #3b2313 100%
+    );
+    --hero-orb-left: #c9853b;
+    --hero-orb-right: #8c6243;
+    --bg-deep: #faf6f1;
+    --bg-surface: #f3ece4;
+    --background: #faf6f1;
+    --foreground: #3b2313;
+    --card: #fffdf9;
+    --card-foreground: #3b2313;
+    --popover: #fffdf9;
+    --popover-foreground: #3b2313;
+    --primary: #d97706;
+    --primary-foreground: #fffef8;
+    --secondary: #f3ece4;
+    --secondary-foreground: #5c4333;
+    --muted: #ece4d9;
+    --muted-foreground: #6b5344;
+    --accent: #f5ebe0;
+    --accent-foreground: #5c4333;
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --border: var(--glass-border);
+    --input: rgb(120 80 40 / 0.14);
+    --ring: #b98f68;
+    --chart-1: #d97706;
+    --chart-2: #5c4333;
+    --chart-3: #8c6243;
+    --chart-4: #b98f68;
+    --chart-5: #6b5344;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: #f3ece4;
+    --sidebar-foreground: #3b2313;
+    --sidebar-primary: #d97706;
+    --sidebar-primary-foreground: #fffef8;
+    --sidebar-accent: #ece4d9;
+    --sidebar-accent-foreground: #5c4333;
+    --sidebar-border: var(--glass-border);
+    --sidebar-ring: #b98f68;
+    scrollbar-color: #c3a78f #ece1d6;
 }
 
 .dark {
@@ -114,6 +137,9 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --bg-deep: oklch(0.09 0.012 264);
+    --bg-surface: oklch(0.14 0.015 264);
+    scrollbar-color: var(--muted-foreground) var(--muted);
 }
 
 @layer base {
