@@ -30,8 +30,8 @@ import {
   toggleUserReactionOnBubble,
   userWillRemoveReaction,
 } from "@/core/agents/web-chat-reactions";
-import { postWebChatReaction } from "@/app/chat/web-chat-reaction-sync";
-import { useChatHeaderActivitySetter } from "./chat-header-activity";
+import { postReaction } from "@/app/chat/reaction-sync";
+import { useSetHeaderStatus } from "./shell-header";
 import {
   Conversation,
   ConversationContent,
@@ -58,6 +58,7 @@ import {
   collectAgentReactionsOnUserMessage,
   isWebChatBubblePart,
 } from "@/core/agents/web-chat-ui-types";
+import { WEB_CHAT_INSTALLATION_ID } from "@/lib/web-chat-installation";
 
 /** Quick emoji row under assistant bubbles (human → agent message). */
 const USER_REACTION_PICKER = ["👍", "❤️", "😂", "🙏", "🔥"] as const;
@@ -813,13 +814,14 @@ function MessageBlocks({
   return null;
 }
 
-export type AgentChatPanelHandle = {
-  /** Persist the active thread's messages (call before switching threads). */
+export type ConversationPanelHandle = {
   persist: () => void;
 };
 
-type AgentChatPanelProps = {
+type ConversationPanelProps = {
   chatId: string;
+  /** Web channel installation (`Thread.external.installationId`). */
+  installationId?: string;
   /** Message snapshot when opening a thread (hydrates the chat after switching). */
   storedMessages: AppWebUIMessage[];
   onThreadMessagesChange?: (threadId: string, messages: AppWebUIMessage[]) => void;
@@ -828,12 +830,13 @@ type AgentChatPanelProps = {
   embedInShell?: boolean;
 };
 
-export const AgentChatPanel = forwardRef<
-  AgentChatPanelHandle,
-  AgentChatPanelProps
->(function AgentChatPanel(
+export const ConversationPanel = forwardRef<
+  ConversationPanelHandle,
+  ConversationPanelProps
+>(function ConversationPanel(
   {
     chatId,
+    installationId = WEB_CHAT_INSTALLATION_ID,
     storedMessages,
     onThreadMessagesChange,
     onUserMessage,
@@ -852,8 +855,22 @@ export const AgentChatPanel = forwardRef<
     () =>
       new WorkflowChatTransport<AppWebUIMessage>({
         api: "/api/chat",
+        prepareSendMessagesRequest: async ({
+          id,
+          messages,
+          api,
+          body: requestBody,
+        }) => ({
+          api,
+          body: {
+            ...requestBody,
+            messages,
+            installationId,
+            externalChatId: id,
+          },
+        }),
       }),
-    [],
+    [installationId],
   );
 
   const { messages, sendMessage, status, stop, error, setMessages } =
@@ -863,7 +880,7 @@ export const AgentChatPanel = forwardRef<
     transport,
   });
 
-  const setHeaderActivity = useChatHeaderActivitySetter();
+  const setHeaderStatus = useSetHeaderStatus();
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -876,18 +893,18 @@ export const AgentChatPanel = forwardRef<
     !hasStreamingSendChatText(lastMsg.parts);
 
   useEffect(() => {
-    if (!setHeaderActivity) {
+    if (!setHeaderStatus) {
       return;
     }
     if (!busy) {
-      setHeaderActivity({ kind: "idle" });
+      setHeaderStatus({ kind: "idle" });
       return;
     }
-    setHeaderActivity({
-      kind: "active",
+    setHeaderStatus({
+      kind: "busy",
       mode: topBarThinking ? "thinking" : "typing",
     });
-  }, [busy, setHeaderActivity, topBarThinking]);
+  }, [busy, setHeaderStatus, topBarThinking]);
 
   useEffect(() => {
     onThreadMessagesChange?.(chatId, messages);
@@ -1009,7 +1026,7 @@ export const AgentChatPanel = forwardRef<
                           p,
                         ),
                       );
-                      void postWebChatReaction({
+                      void postReaction({
                         threadId: chatId,
                         bubbleId,
                         emoji,

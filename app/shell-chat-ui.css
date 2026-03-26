@@ -1,0 +1,13 @@
+/* Chat shell utilities; --shell-accent* from ShellAccent (inline). */
+
+.shell-accent-soft-bg {
+  background-color: rgb(var(--shell-accent-rgb) / 0.16);
+}
+
+.shell-accent-text {
+  color: var(--shell-accent);
+}
+
+[data-shell-theme="light"] .shell-accent-soft-bg {
+  background-color: rgb(var(--shell-accent-rgb) / 0.12);
+}

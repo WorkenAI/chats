@@ -4,7 +4,7 @@
  *   bun run test:agent
  *   bun run test:agent:local   # loads AI_GATEWAY_API_KEY from .env.local
  *
- * Full `runChannelAgentTurn` runs inside Next.js (workflow transform); this
+ * Full messenger workflows run inside Next.js (workflow transform); this
  * integration test only verifies Gateway + model access from your account.
  */
 import { describe, expect, test } from "bun:test";

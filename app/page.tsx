@@ -1,52 +1,59 @@
 "use client";
 
 import type { AppWebUIMessage } from "@/core/agents/web-chat-ui-types";
-import { AccentWorkspace } from "./chat/accent-workspace";
-import {
-  ChatHeaderActivityProvider,
-  ThreadTitleHeader,
-} from "./chat/chat-header-activity";
-import { ChatLayout } from "./chat/chat-layout";
-import { ThemeScope } from "./chat/theme-scope";
-import { WorkspaceRoot } from "./chat/workspace-root";
+import { ShellAccent } from "./chat/shell-accent";
+import { HeaderProvider, ThreadHeader } from "./chat/shell-header";
+import { WorkspaceLayout } from "./chat/workspace-layout";
+import { ShellRoot } from "./chat/shell-root";
+import { ShellTheme, type ShellAppearance } from "./chat/shell-theme";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AgentChatPanel,
-  type AgentChatPanelHandle,
-} from "./chat/agent-chat-panel";
+  ConversationPanel,
+  type ConversationPanelHandle,
+} from "./chat/conversation-panel";
 import { inferThreadPreviewAvatarFromMessages } from "@/core/agents/web-chat-reactions";
 import {
   loadPersistedChatWorkspace,
   savePersistedChatWorkspace,
+  type ThreadRow,
 } from "@/lib/chat-threads-storage";
-import { type ThreadItem, ThreadList } from "./chat/thread-list";
+import { WEB_CHAT_INSTALLATION_ID } from "@/lib/web-chat-installation";
+import { ThreadSidebar } from "./chat/thread-sidebar";
 
 const NEW_TITLE = "New chat";
 
 type ChatUIMessage = AppWebUIMessage;
 
-function makeThread(): ThreadItem {
+function makeThread(): ThreadRow {
   return { id: crypto.randomUUID(), title: NEW_TITLE };
 }
 
 export default function ChatPage() {
   const first = useMemo(() => makeThread(), []);
-  const [threads, setThreads] = useState<ThreadItem[]>([first]);
+  const [threads, setThreads] = useState<ThreadRow[]>([first]);
   const [activeId, setActiveId] = useState(first.id);
   const [threadMessages, setThreadMessages] = useState<
     Record<string, ChatUIMessage[]>
   >({});
+  const [webInstallationId, setWebInstallationId] = useState(
+    WEB_CHAT_INSTALLATION_ID,
+  );
   const [workspaceHydrated, setWorkspaceHydrated] = useState(false);
   const persistRef = useRef({
     threads,
     activeId,
     threadMessages,
+    webInstallationId,
   });
-  persistRef.current = { threads, activeId, threadMessages };
-  const panelRef = useRef<AgentChatPanelHandle>(null);
+  persistRef.current = {
+    threads,
+    activeId,
+    threadMessages,
+    webInstallationId,
+  };
+  const panelRef = useRef<ConversationPanelHandle>(null);
   const { resolvedTheme, setTheme } = useTheme();
-  /** next-themes has no resolved theme on the server; the client may resolve immediately. Gate on mount so SSR and the first client render match. */
   const [themeReady, setThemeReady] = useState(false);
   useEffect(() => {
     setThemeReady(true);
@@ -55,6 +62,7 @@ export default function ChatPage() {
   useEffect(() => {
     const loaded = loadPersistedChatWorkspace();
     if (loaded) {
+      setWebInstallationId(loaded.webInstallationId);
       setThreads(loaded.threads);
       setActiveId(loaded.activeId);
       setThreadMessages(loaded.threadMessages);
@@ -68,14 +76,15 @@ export default function ChatPage() {
     }
     const id = setTimeout(() => {
       savePersistedChatWorkspace({
-        version: 1,
+        version: 2,
+        webInstallationId,
         activeId,
         threads,
         threadMessages,
       });
     }, 400);
     return () => clearTimeout(id);
-  }, [workspaceHydrated, activeId, threads, threadMessages]);
+  }, [workspaceHydrated, activeId, threads, threadMessages, webInstallationId]);
 
   useEffect(() => {
     if (!workspaceHydrated || typeof window === "undefined") {
@@ -84,7 +93,8 @@ export default function ChatPage() {
     const flush = () => {
       const s = persistRef.current;
       savePersistedChatWorkspace({
-        version: 1,
+        version: 2,
+        webInstallationId: s.webInstallationId,
         activeId: s.activeId,
         threads: s.threads,
         threadMessages: s.threadMessages,
@@ -94,7 +104,7 @@ export default function ChatPage() {
     return () => window.removeEventListener("pagehide", flush);
   }, [workspaceHydrated]);
 
-  const chromeTheme =
+  const appearance: ShellAppearance =
     !themeReady || resolvedTheme === undefined
       ? "dark"
       : resolvedTheme === "light"
@@ -106,7 +116,9 @@ export default function ChatPage() {
       : resolvedTheme === "light"
         ? "#d97706"
         : "#22d3ee";
-  const toggleChromeTheme = useCallback(() => {
+  const accentContrast =
+    appearance === "light" ? "#fffef8" : "#071217";
+  const toggleAppearance = useCallback(() => {
     setTheme(resolvedTheme === "light" ? "dark" : "light");
   }, [resolvedTheme, setTheme]);
 
@@ -195,22 +207,21 @@ export default function ChatPage() {
   const activeTitle = activeThread?.title ?? NEW_TITLE;
 
   return (
-    <AccentWorkspace
+    <ShellAccent
       accentColor={accent}
-      accentContrast={chromeTheme === "light" ? "#fffef8" : "#071217"}
+      accentContrast={accentContrast}
       className="h-dvh"
     >
-      <WorkspaceRoot>
-        <ThemeScope theme={chromeTheme} toggle={toggleChromeTheme}>
-          <ChatHeaderActivityProvider>
-            <ChatLayout
-              breadcrumbs={
-                <ThreadTitleHeader title={activeTitle} />
-              }
+      <ShellRoot>
+        <ShellTheme appearance={appearance} toggle={toggleAppearance}>
+          <HeaderProvider>
+            <WorkspaceLayout
+              breadcrumbs={<ThreadHeader title={activeTitle} />}
               conversation={
-                <AgentChatPanel
+                <ConversationPanel
                   ref={panelRef}
                   chatId={activeId}
+                  installationId={webInstallationId}
                   embedInShell
                   onThreadMessagesChange={handleThreadMessagesChange}
                   onUserMessage={onUserMessage}
@@ -218,7 +229,7 @@ export default function ChatPage() {
                 />
               }
               sidebar={
-                <ThreadList
+                <ThreadSidebar
                   activeId={activeId}
                   onDelete={onDeleteThread}
                   onNew={onNew}
@@ -228,9 +239,9 @@ export default function ChatPage() {
                 />
               }
             />
-          </ChatHeaderActivityProvider>
-        </ThemeScope>
-      </WorkspaceRoot>
-    </AccentWorkspace>
+          </HeaderProvider>
+        </ShellTheme>
+      </ShellRoot>
+    </ShellAccent>
   );
 }

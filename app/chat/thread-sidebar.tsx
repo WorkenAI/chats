@@ -2,47 +2,40 @@
 
 import type { ReactNode } from "react";
 import { Layers, MessageSquarePlus, PanelLeftClose, Trash2 } from "lucide-react";
-import { chromeSidebarIconButtonClass } from "@/app/chat/chrome-sidebar-icon-button";
-import { useChromeTheme } from "@/app/chat/theme-scope";
+import { shellHeaderIconClass } from "@/app/chat/shell-icon-button";
+import { useShellTheme } from "@/app/chat/shell-theme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Sidebar title row (threads workspace); aligns with AI Elements / conversation chrome. */
-export function ThreadsChromeLabel() {
+export function ThreadNavLabel() {
   return (
     <div className="text-muted-foreground flex items-center gap-2">
       <Layers className="size-3.5 shrink-0 opacity-80" aria-hidden />
-      <p className="text-xs font-medium tracking-wide">
-        Threads
-      </p>
+      <p className="text-xs font-medium tracking-wide">Threads</p>
     </div>
   );
 }
 
-export type ThreadItem = {
+export type ThreadRow = {
   id: string;
   title: string;
-  /** Last user reaction author avatar in this thread (Dicebear or custom URL). */
   previewAvatarUrl?: string;
 };
 
-type ThreadListProps = {
-  threads: ThreadItem[];
+type ThreadSidebarProps = {
+  threads: ThreadRow[];
   activeId: string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onNew: () => void;
-  /** Narrow column inside shell frame (no fixed width / side border). */
   variant?: "page" | "shell";
-  /** Passed by `ChatLayout` via `cloneElement` when used as `sidebar`. */
   isSidebarCollapsed?: boolean;
-  /** Middle slot in the shell header row (e.g. `ChatLayout` `windowControls`). */
   sidebarHeaderMiddle?: ReactNode;
   onCollapseSidebar?: () => void;
   collapseSidebarTitle?: string;
 };
 
-export function ThreadList({
+export function ThreadSidebar({
   threads,
   activeId,
   onSelect,
@@ -53,9 +46,9 @@ export function ThreadList({
   sidebarHeaderMiddle,
   onCollapseSidebar,
   collapseSidebarTitle,
-}: ThreadListProps) {
-  const { theme } = useChromeTheme();
-  const newChatButtonClass = chromeSidebarIconButtonClass(theme);
+}: ThreadSidebarProps) {
+  const { appearance } = useShellTheme();
+  const collapseBtn = shellHeaderIconClass(appearance);
   const isShell = variant === "shell";
   const rootClass = isShell
     ? "flex h-full min-h-0 w-full flex-col"
@@ -70,14 +63,14 @@ export function ThreadList({
           )}
         >
           <div className="shrink-0">
-            <ThreadsChromeLabel />
+            <ThreadNavLabel />
           </div>
           <div className="min-w-0 flex-1">{sidebarHeaderMiddle}</div>
           {onCollapseSidebar ? (
             <button
               type="button"
               onClick={onCollapseSidebar}
-              className={newChatButtonClass}
+              className={collapseBtn}
               title={collapseSidebarTitle ?? "Collapse left panel"}
             >
               <PanelLeftClose size={16} />
@@ -86,7 +79,7 @@ export function ThreadList({
         </header>
       ) : null}
       <nav
-        aria-label="Conversation threads"
+        aria-label="Threads"
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2"
       >
         {threads.map((t) => {
@@ -139,11 +132,9 @@ export function ThreadList({
                 className={cn(
                   "text-muted-foreground shrink-0 self-center hover:bg-destructive/10 hover:text-destructive",
                   "transition-opacity duration-150",
-                  /* Hover devices: hide until row hover / focus-within */
                   "opacity-0 pointer-events-none",
                   "group-hover:opacity-100 group-hover:pointer-events-auto",
                   "group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
-                  /* Coarse / no-hover (matches ChatLayout mobile breakpoint): keep tappable */
                   "max-md:opacity-100 max-md:pointer-events-auto",
                 )}
                 onClick={() => onDelete(t.id)}

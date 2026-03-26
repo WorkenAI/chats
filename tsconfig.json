@@ -32,8 +32,7 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "paths": {
-      "@/*": ["./*"],
-      "@shell/*": ["./export/shell-chat-ui/src/*"]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -44,7 +43,6 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "export/shell-chat-ui/**"
+    "node_modules"
   ]
 }

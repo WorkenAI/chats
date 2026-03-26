@@ -1,6 +1,6 @@
 import type { WebChatParticipant } from "@/core/agents/web-chat-participant";
 
-export async function postWebChatReaction(input: {
+export async function postReaction(input: {
   threadId: string;
   bubbleId: string;
   emoji: string;

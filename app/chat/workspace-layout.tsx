@@ -11,21 +11,16 @@ import {
   useLayoutEffect,
   useState,
 } from "react";
-import { chromeSidebarIconButtonClass } from "./chrome-sidebar-icon-button";
-import { useChromeTheme } from "./theme-scope";
+import { shellHeaderIconClass } from "./shell-icon-button";
+import { useShellTheme } from "./shell-theme";
 
 const SIDEBAR_WIDTH = "w-64";
-const CHROME_ROW = "h-12";
-/** Pad main column below the fixed header (same height as CHROME_ROW). */
-const HEADER_CONTENT_PT = "pt-12";
-/** Align with Tailwind `md` (768px): mobile = one full-screen pane at a time. */
+const HEADER_ROW = "h-12";
+const HEADER_BODY_PT = "pt-12";
 const MOBILE_MQ = "(max-width: 767px)";
 
-/**
- * Sidebar + header + conversation. No right inspector column.
- * Injects collapse state into sidebar via `cloneElement` when it is a valid element.
- */
-export function ChatLayout({
+/** Sidebar, top bar, main column. Optional third column can wrap `conversation`. */
+export function WorkspaceLayout({
   sidebar,
   conversation,
   breadcrumbs,
@@ -36,7 +31,7 @@ export function ChatLayout({
   breadcrumbs?: ReactNode;
   windowControls?: ReactNode;
 }) {
-  const { theme, toggle: toggleTheme } = useChromeTheme();
+  const { appearance, toggle: toggleAppearance } = useShellTheme();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobileLayout = useMediaQuery(MOBILE_MQ);
 
@@ -47,15 +42,15 @@ export function ChatLayout({
   }, [isMobileLayout]);
 
   const sidebarDesktopBg =
-    theme === "light"
+    appearance === "light"
       ? "color-mix(in srgb, var(--bg-surface) 88%, white 12%)"
       : "color-mix(in srgb, var(--bg-deep) 94%, white 6%)";
-  const chromeIconButtonClass = chromeSidebarIconButtonClass(theme);
+  const headerBtn = shellHeaderIconClass(appearance);
   const mainColumnClass =
-    theme === "light" ? "bg-card" : "bg-zinc-950/10";
+    appearance === "light" ? "bg-card" : "bg-zinc-950/10";
   const headerBarClass = cn(
     "absolute inset-x-0 top-0 z-10 border-b backdrop-blur-xl transition-[background-color,border-color,backdrop-filter] duration-300 ease-out",
-    theme === "light"
+    appearance === "light"
       ? "border-[color:var(--glass-border)] bg-[color-mix(in_srgb,var(--bg-surface)_72%,white_28%)]/95"
       : "border-zinc-800/30 bg-zinc-950/30",
   );
@@ -101,8 +96,8 @@ export function ChatLayout({
     });
   })();
 
-  const showSidebarChrome = !sidebarCollapsed;
-  const sidebarIsFullscreenMobile = isMobileLayout && showSidebarChrome;
+  const showSidebar = !sidebarCollapsed;
+  const sidebarIsFullscreenMobile = isMobileLayout && showSidebar;
 
   return (
     <div className="text-foreground flex h-full overflow-hidden bg-(--bg-deep) transition-all duration-150">
@@ -110,11 +105,11 @@ export function ChatLayout({
         className={cn(
           "flex flex-col overflow-hidden backdrop-blur-xl transition-[width] duration-200",
           isMobileLayout && sidebarCollapsed && "hidden",
-          isMobileLayout && showSidebarChrome &&
+          isMobileLayout && showSidebar &&
             "fixed inset-0 z-40 h-dvh w-full max-w-none shrink-0 pt-[env(safe-area-inset-top)]",
           !isMobileLayout && "relative h-full shrink-0",
           !isMobileLayout && sidebarCollapsed && "w-0",
-          !isMobileLayout && showSidebarChrome && SIDEBAR_WIDTH,
+          !isMobileLayout && showSidebar && SIDEBAR_WIDTH,
         )}
         style={{ backgroundColor: sidebarDesktopBg }}
       >
@@ -133,12 +128,12 @@ export function ChatLayout({
         )}
       >
         <div className={headerBarClass}>
-          <div className={cn("flex items-center gap-2 px-1.5", CHROME_ROW)}>
+          <div className={cn("flex items-center gap-2 px-1.5", HEADER_ROW)}>
             {sidebarCollapsed ? (
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(false)}
-                className={chromeIconButtonClass}
+                className={headerBtn}
                 title={isMobileLayout ? "Threads" : "Expand left panel"}
               >
                 <PanelLeftOpen size={16} />
@@ -147,11 +142,11 @@ export function ChatLayout({
             <div className="min-w-0 flex-1">{breadcrumbs}</div>
             <button
               type="button"
-              onClick={toggleTheme}
-              className={chromeIconButtonClass}
-              title={theme === "dark" ? "Light theme" : "Dark theme"}
+              onClick={toggleAppearance}
+              className={headerBtn}
+              title={appearance === "dark" ? "Light theme" : "Dark theme"}
             >
-              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+              {appearance === "dark" ? <Sun size={15} /> : <Moon size={15} />}
             </button>
           </div>
         </div>
@@ -159,7 +154,7 @@ export function ChatLayout({
         <div
           className={cn(
             "relative flex min-h-0 flex-1 flex-col overflow-hidden",
-            HEADER_CONTENT_PT,
+            HEADER_BODY_PT,
           )}
         >
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

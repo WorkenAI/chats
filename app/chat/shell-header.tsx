@@ -10,38 +10,30 @@ import {
   type ReactNode,
 } from "react";
 
-export type ChatHeaderActivity =
+export type HeaderStatus =
   | { kind: "idle" }
-  | { kind: "active"; mode: "typing" | "thinking" };
+  | { kind: "busy"; mode: "typing" | "thinking" };
 
-type ChatHeaderActivityContextValue = {
-  activity: ChatHeaderActivity;
-  setActivity: (next: ChatHeaderActivity) => void;
+type HeaderContextValue = {
+  status: HeaderStatus;
+  setStatus: (next: HeaderStatus) => void;
 };
 
-const ChatHeaderActivityContext =
-  createContext<ChatHeaderActivityContextValue | null>(null);
+const HeaderContext = createContext<HeaderContextValue | null>(null);
 
-export function ChatHeaderActivityProvider({ children }: { children: ReactNode }) {
-  const [activity, setActivityState] = useState<ChatHeaderActivity>({
-    kind: "idle",
-  });
-  const setActivity = useCallback((next: ChatHeaderActivity) => {
-    setActivityState(next);
+export function HeaderProvider({ children }: { children: ReactNode }) {
+  const [status, setStatusState] = useState<HeaderStatus>({ kind: "idle" });
+  const setStatus = useCallback((next: HeaderStatus) => {
+    setStatusState(next);
   }, []);
-  const value = useMemo(
-    () => ({ activity, setActivity }),
-    [activity, setActivity],
-  );
+  const value = useMemo(() => ({ status, setStatus }), [status, setStatus]);
   return (
-    <ChatHeaderActivityContext.Provider value={value}>
-      {children}
-    </ChatHeaderActivityContext.Provider>
+    <HeaderContext.Provider value={value}>{children}</HeaderContext.Provider>
   );
 }
 
-export function useChatHeaderActivitySetter() {
-  return useContext(ChatHeaderActivityContext)?.setActivity;
+export function useSetHeaderStatus() {
+  return useContext(HeaderContext)?.setStatus;
 }
 
 function TypingDots() {
@@ -58,20 +50,19 @@ function TypingDots() {
   );
 }
 
-/** Header center: thread title, optional tagline, or typing/thinking when the agent is busy. */
-export function ThreadTitleHeader({
+/** Title row: optional tagline when idle; typing/thinking when the model is active. */
+export function ThreadHeader({
   title,
   tagline,
 }: {
   title: string;
-  /** Shown under the title when idle; omit to hide the subtitle row. */
   tagline?: string;
 }) {
-  const ctx = useContext(ChatHeaderActivityContext);
-  const activity = ctx?.activity ?? { kind: "idle" as const };
-  const busy = activity.kind === "active";
+  const ctx = useContext(HeaderContext);
+  const status = ctx?.status ?? { kind: "idle" as const };
+  const busy = status.kind === "busy";
   const label =
-    activity.kind === "active" && activity.mode === "thinking"
+    status.kind === "busy" && status.mode === "thinking"
       ? "Thinking…"
       : "Typing…";
 

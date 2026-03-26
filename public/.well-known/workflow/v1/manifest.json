@@ -1,11 +1,6 @@
 {
   "version": "1.0.0",
   "steps": {
-    "node_modules/workflow/dist/stdlib.js": {
-      "fetch": {
-        "stepId": "step//workflow@4.2.0-beta.72//fetch"
-      }
-    },
     "node_modules/workflow/dist/internal/builtins.js": {
       "__builtin_response_array_buffer": {
         "stepId": "__builtin_response_array_buffer"
@@ -17,20 +12,17 @@
         "stepId": "__builtin_response_text"
       }
     },
-    "workflows/web-chat-turn.ts": {
-      "tools/send_chat_message/execute": {
-        "stepId": "step//./workflows/web-chat-turn//runWebChatTurn/tools/send_chat_message/execute"
+    "workflows/messenger-agent-turn.ts": {
+      "messengerSendChatMessageStep": {
+        "stepId": "step//./workflows/messenger-agent-turn//messengerSendChatMessageStep"
       },
-      "tools/set_message_reaction/execute": {
-        "stepId": "step//./workflows/web-chat-turn//runWebChatTurn/tools/set_message_reaction/execute"
+      "messengerSetMessageReactionStep": {
+        "stepId": "step//./workflows/messenger-agent-turn//messengerSetMessageReactionStep"
       }
     },
-    "workflows/channel-agent-turn.ts": {
-      "tools/send_chat_message/execute": {
-        "stepId": "step//./workflows/channel-agent-turn//runChannelAgentTurn/tools/send_chat_message/execute"
-      },
-      "tools/set_message_reaction/execute": {
-        "stepId": "step//./workflows/channel-agent-turn//runChannelAgentTurn/tools/set_message_reaction/execute"
+    "node_modules/workflow/dist/stdlib.js": {
+      "fetch": {
+        "stepId": "step//workflow@4.2.0-beta.72//fetch"
       }
     },
     "node_modules/@workflow/ai/dist/agent/stream-text-iterator.js": {
@@ -61,16 +53,16 @@
     }
   },
   "workflows": {
-    "workflows/web-chat-turn.ts": {
-      "runWebChatTurn": {
-        "workflowId": "workflow//./workflows/web-chat-turn//runWebChatTurn",
+    "workflows/messenger-agent-turn.ts": {
+      "runChannelMessengerAgentTurn": {
+        "workflowId": "workflow//./workflows/messenger-agent-turn//runChannelMessengerAgentTurn",
         "graph": {
           "nodes": [
             {
               "id": "start",
               "type": "workflowStart",
               "data": {
-                "label": "Start: runWebChatTurn",
+                "label": "Start: runChannelMessengerAgentTurn",
                 "nodeKind": "workflow_start"
               }
             },
@@ -110,18 +102,16 @@
             }
           ]
         }
-      }
-    },
-    "workflows/channel-agent-turn.ts": {
-      "runChannelAgentTurn": {
-        "workflowId": "workflow//./workflows/channel-agent-turn//runChannelAgentTurn",
+      },
+      "runWebMessengerAgentTurn": {
+        "workflowId": "workflow//./workflows/messenger-agent-turn//runWebMessengerAgentTurn",
         "graph": {
           "nodes": [
             {
               "id": "start",
               "type": "workflowStart",
               "data": {
-                "label": "Start: runChannelAgentTurn",
+                "label": "Start: runWebMessengerAgentTurn",
                 "nodeKind": "workflow_start"
               }
             },

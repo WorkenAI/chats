@@ -21,8 +21,8 @@ function hexToRgbCsv(hex: string): string {
   return `${r}, ${g}, ${b}`;
 }
 
-/** Sets `--shell-accent*` CSS variables (see `shell-chat-ui.css`). */
-export function AccentWorkspace({
+/** Sets `--shell-accent*` CSS variables (see `app/shell-chat-ui.css`). */
+export function ShellAccent({
   accentColor = DEFAULT_ACCENT,
   accentContrast = "#071217",
   className,

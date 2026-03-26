@@ -2,7 +2,7 @@ import { start } from "workflow/api";
 import type { InboundEvent } from "@/core/connectors/types";
 import { isAiGatewayAvailable } from "@/core/agents/gateway-env";
 import { appendUserMessage } from "@/core/conversations/store";
-import { runChannelAgentTurn } from "@/workflows/channel-agent-turn";
+import { runChannelMessengerAgentTurn } from "@/workflows/messenger-agent-turn";
 import { tryMarkProcessed } from "./dedupe";
 
 /**
@@ -59,7 +59,7 @@ async function maybeStartChannelAgent(event: InboundEvent): Promise<void> {
       : undefined,
   );
 
-  await start(runChannelAgentTurn, [
+  await start(runChannelMessengerAgentTurn, [
     {
       installationId: event.connector.installationId,
       externalChatId: event.conversation.externalChatId,
