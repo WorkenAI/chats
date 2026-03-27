@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { WorkflowChatTransport } from "@workflow/ai";
 import {
   getToolName,
+  isFileUIPart,
   isToolUIPart,
   type DynamicToolUIPart,
   type ToolUIPart,
@@ -43,22 +44,25 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import {
-  PromptInput,
-  type PromptInputMessage,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
 import type { AgentUserMessageMetadata } from "@/core/agents/message-metadata";
 import { cn } from "@/lib/utils";
 import {
   type AppWebUIMessage,
+  type WebChatBubbleData,
+  type WebChatBubbleFileAttachment,
   type WebChatUserReaction,
   collectAgentReactionsOnUserMessage,
   isWebChatBubblePart,
+  webChatBubbleFileAttachmentsToFileParts,
 } from "@/core/agents/web-chat-ui-types";
 import { WEB_CHAT_INSTALLATION_ID } from "@/lib/web-chat-installation";
+import { ChatFileViewerPanel } from "@/app/chat/chat-file-viewer-panel";
+import { ChatFileViewerProvider } from "@/app/chat/chat-file-viewer-context";
+import { ChatMessageFileAttachments } from "@/app/chat/chat-message-file-attachments";
+import { stripOuterQuotes } from "@/lib/file-url-to-buffer";
+import { ConversationChatPrompt } from "@/app/chat/conversation-chat-prompt";
 
 /** Quick emoji row under assistant bubbles (human → agent message). */
 const USER_REACTION_PICKER = ["👍", "❤️", "😂", "🙏", "🔥"] as const;
@@ -81,6 +85,13 @@ function previewForUserMessage(m: AppWebUIMessage): string {
     (p): p is { type: "text"; text: string } => p.type === "text",
   );
   const combined = textParts.map((p) => p.text).join("").trim();
+  const fileParts = m.parts.filter(isFileUIPart);
+  if (!combined && fileParts.length > 0) {
+    const names = fileParts
+      .map((p) => p.filename?.trim() || "File")
+      .join(", ");
+    return names.length > 120 ? `${names.slice(0, 120)}…` : names;
+  }
   if (!combined) {
     return "Message";
   }
@@ -520,9 +531,38 @@ function hasDataBubbleForToolCall(
   );
 }
 
+function parseSendChatToolAttachments(
+  raw: unknown,
+): WebChatBubbleFileAttachment[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+  const out: WebChatBubbleFileAttachment[] = [];
+  for (const item of raw) {
+    if (item == null || typeof item !== "object") {
+      continue;
+    }
+    const o = item as Record<string, unknown>;
+    const url =
+      typeof o.url === "string" ? stripOuterQuotes(o.url.trim()) : "";
+    const mediaType =
+      typeof o.mediaType === "string" ? o.mediaType.trim() : "";
+    if (!url || !mediaType) {
+      continue;
+    }
+    out.push({
+      url,
+      mediaType,
+      ...(typeof o.filename === "string" ? { filename: o.filename.trim() } : {}),
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function parseSendChatToolInput(part: { input: unknown }): {
   text: string;
   replyToMessageId?: string;
+  attachments?: WebChatBubbleFileAttachment[];
 } {
   const input = part.input;
   if (input == null || typeof input !== "object") {
@@ -532,7 +572,20 @@ function parseSendChatToolInput(part: { input: unknown }): {
   const text = typeof o.text === "string" ? o.text : "";
   const replyToMessageId =
     typeof o.replyToMessageId === "string" ? o.replyToMessageId : undefined;
-  return { text, replyToMessageId };
+  const attachments = parseSendChatToolAttachments(o.attachments);
+  return { text, replyToMessageId, attachments };
+}
+
+function bubblePreviewText(data: WebChatBubbleData): string {
+  const t = data.text.trim();
+  if (t.length > 0) {
+    return t;
+  }
+  const fa = data.fileAttachments;
+  if (fa != null && fa.length > 0) {
+    return fa.map((f) => f.filename?.trim() || "File").join(", ");
+  }
+  return "";
 }
 
 function shouldShowStreamingSendChatBubble(
@@ -554,7 +607,7 @@ function shouldShowStreamingSendChatBubble(
   );
 }
 
-function hasStreamingSendChatText(parts: AppWebUIMessage["parts"]): boolean {
+function hasStreamingSendChatContent(parts: AppWebUIMessage["parts"]): boolean {
   for (const p of parts) {
     if (!isToolUIPart(p) || getToolName(p) !== "send_chat_message") {
       continue;
@@ -562,7 +615,11 @@ function hasStreamingSendChatText(parts: AppWebUIMessage["parts"]): boolean {
     if (hasDataBubbleForToolCall(parts, p.toolCallId)) {
       continue;
     }
-    if (parseSendChatToolInput(p).text.trim().length > 0) {
+    const { text, attachments } = parseSendChatToolInput(p);
+    if (text.trim().length > 0) {
+      return true;
+    }
+    if ((attachments?.length ?? 0) > 0) {
       return true;
     }
   }
@@ -611,7 +668,8 @@ function MessageBlocks({
       .filter((p): p is { type: "text"; text: string } => p.type === "text")
       .map((p) => p.text)
       .join("");
-    if (!text.trim()) {
+    const fileParts = message.parts.filter(isFileUIPart);
+    if (!text.trim() && fileParts.length === 0) {
       return null;
     }
     const meta = message.metadata;
@@ -651,9 +709,12 @@ function MessageBlocks({
                 {quotePreview}
               </p>
             ) : null}
-            <MessageResponse className="text-[15px] leading-relaxed">
-              {text}
-            </MessageResponse>
+            {text.trim() ? (
+              <MessageResponse className="text-[15px] leading-relaxed">
+                {text}
+              </MessageResponse>
+            ) : null}
+            <ChatMessageFileAttachments className="pt-0.5" parts={fileParts} />
             {agentReactions.length > 0 ? (
               <ReactionChips
                 className="opacity-100"
@@ -687,6 +748,11 @@ function MessageBlocks({
         const hasBubbleControls =
           bubbleId != null && bubbleId.length > 0;
 
+        const bubblePreview = bubblePreviewText(part.data);
+        const bubbleFileParts = webChatBubbleFileAttachmentsToFileParts(
+          part.data.fileAttachments,
+        );
+
         const bubbleBody = (
           <MessageContent
             className={cn(
@@ -699,9 +765,17 @@ function MessageBlocks({
                 {quotePreview}
               </p>
             ) : null}
-            <MessageResponse className="text-[15px] leading-relaxed [&_.streamdown]:text-[15px]">
-              {part.data.text}
-            </MessageResponse>
+            {part.data.text.trim() ? (
+              <MessageResponse className="text-[15px] leading-relaxed [&_.streamdown]:text-[15px]">
+                {part.data.text}
+              </MessageResponse>
+            ) : null}
+            {bubbleFileParts.length > 0 ? (
+              <ChatMessageFileAttachments
+                className="pt-0.5"
+                parts={bubbleFileParts}
+              />
+            ) : null}
             {userRx.length > 0 ? (
               <UserReactionStacks
                 currentUserId={currentUserId}
@@ -736,16 +810,16 @@ function MessageBlocks({
                   <MessageBubbleSecondaryBar
                     align="start"
                     busy={busy}
-                    forwardText={part.data.text}
+                    forwardText={bubblePreview}
                     onDelete={() =>
                       onDeleteAssistantBubble(message.id, bubbleId)
                     }
                     onReply={() =>
                       onReplyBubble(
                         bubbleId,
-                        part.data.text.trim().length > 120
-                          ? `${part.data.text.trim().slice(0, 120)}…`
-                          : part.data.text.trim(),
+                        bubblePreview.length > 120
+                          ? `${bubblePreview.slice(0, 120)}…`
+                          : bubblePreview,
                       )
                     }
                     open={open}
@@ -766,12 +840,16 @@ function MessageBlocks({
         isToolUIPart(part) &&
         shouldShowStreamingSendChatBubble(part, message.parts)
       ) {
-        const { text, replyToMessageId } = parseSendChatToolInput(part);
+        const { text, replyToMessageId, attachments } =
+          parseSendChatToolInput(part);
         const quotePreview = replyToMessageId
           ? findQuotePreview(replyToMessageId, allMessages)
           : undefined;
         const stableKey = `${message.id}-stream-${part.toolCallId}`;
-        const showTypingPlaceholder = busy && !text.trim();
+        const streamFileParts =
+          webChatBubbleFileAttachmentsToFileParts(attachments);
+        const showTypingPlaceholder =
+          busy && !text.trim() && streamFileParts.length === 0;
 
         rows.push(
           <Message
@@ -800,6 +878,12 @@ function MessageBlocks({
                   <p className="text-muted-foreground animate-pulse text-[15px] leading-relaxed">
                     …
                   </p>
+                ) : null}
+                {streamFileParts.length > 0 ? (
+                  <ChatMessageFileAttachments
+                    className="pt-0.5"
+                    parts={streamFileParts}
+                  />
                 ) : null}
               </MessageContent>
             </div>
@@ -845,7 +929,6 @@ export const ConversationPanel = forwardRef<
   ref,
 ) {
   const [viewer, setViewer] = useState<WebChatParticipant | null>(null);
-  const [input, setInput] = useState("");
   const [replyTo, setReplyTo] = useState<{
     id: string;
     preview: string;
@@ -890,7 +973,7 @@ export const ConversationPanel = forwardRef<
     lastMsg?.role === "assistant" &&
     lastMsg.parts.filter(isWebChatBubblePart).length === 0 &&
     hasAssistantToolNoise(lastMsg.parts) &&
-    !hasStreamingSendChatText(lastMsg.parts);
+    !hasStreamingSendChatContent(lastMsg.parts);
 
   useEffect(() => {
     if (!setHeaderStatus) {
@@ -929,29 +1012,55 @@ export const ConversationPanel = forwardRef<
   );
 
   const handleSubmit = (message: PromptInputMessage) => {
-    const text = message.text.trim();
-    if (!text || busy) {
+    if (busy) {
       return;
     }
-    setInput("");
-    onUserMessage?.(text);
-    const meta: AgentUserMessageMetadata | undefined = replyTo
-      ? { replyToMessageId: replyTo.id }
-      : undefined;
+    const text = message.text.trim();
+    const files = message.files;
+    if (!text && files.length === 0) {
+      return;
+    }
+    const reply = replyTo;
     setReplyTo(null);
-    void sendMessage(
-      meta != null ? { text, metadata: meta } : { text },
-    );
+    const meta: AgentUserMessageMetadata | undefined = reply
+      ? { replyToMessageId: reply.id }
+      : undefined;
+
+    if (text) {
+      onUserMessage?.(text);
+    }
+
+    if (text && files.length > 0) {
+      void sendMessage(
+        meta != null
+          ? { text, files, metadata: meta }
+          : { text, files },
+      );
+    } else if (text) {
+      void sendMessage(meta != null ? { text, metadata: meta } : { text });
+    } else {
+      void sendMessage(
+        meta != null ? { files, metadata: meta } : { files },
+      );
+    }
   };
 
   return (
-    <div
-      className={cn(
-        "flex h-full min-h-0 min-w-0 flex-1 flex-col gap-5",
-        embedInShell ? "px-3 py-3 sm:px-5 sm:py-4" : "px-4 py-4 sm:px-6 sm:py-5",
-      )}
-    >
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-1 flex-col gap-5">
+    <ChatFileViewerProvider>
+      <div
+        className={cn(
+          "flex h-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden",
+        )}
+      >
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-hidden",
+            embedInShell
+              ? "px-3 py-3 sm:px-5 sm:py-4"
+              : "px-4 py-4 sm:px-6 sm:py-5",
+          )}
+        >
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-1 flex-col gap-5">
         <Conversation
           className={cn(
             "min-h-0 min-w-0 flex-1",
@@ -1072,25 +1181,13 @@ export const ConversationPanel = forwardRef<
             </div>
           ) : null}
 
-          <PromptInput
-            className="relative w-full shrink-0"
+          <ConversationChatPrompt
+            busy={busy}
+            chatId={chatId}
+            onStop={() => void stop()}
             onSubmit={handleSubmit}
-          >
-            <PromptInputTextarea
-              aria-label="Message"
-              className="pr-12"
-              disabled={busy}
-              onChange={(e) => setInput(e.currentTarget.value)}
-              placeholder="Message…"
-              value={input}
-            />
-            <PromptInputSubmit
-              className="absolute right-1 bottom-1"
-              disabled={!input.trim() && !busy}
-              onStop={() => void stop()}
-              status={status}
-            />
-          </PromptInput>
+            status={status}
+          />
 
           {error ? (
             <p
@@ -1101,7 +1198,10 @@ export const ConversationPanel = forwardRef<
             </p>
           ) : null}
         </div>
+          </div>
+        </div>
+        <ChatFileViewerPanel />
       </div>
-    </div>
+    </ChatFileViewerProvider>
   );
 });

@@ -19,6 +19,7 @@ export function webChatBubbleDataPartToTextPart(
     text?: unknown;
     replyToMessageId?: unknown;
     userReactions?: unknown;
+    fileAttachments?: unknown;
   };
   if (typeof d.text !== "string") {
     return undefined;
@@ -48,9 +49,27 @@ export function webChatBubbleDataPartToTextPart(
     reactionEmojis.length > 0
       ? ` userReactions=${reactionEmojis.join(",")}`
       : "";
+  const fa = Array.isArray(d.fileAttachments) ? d.fileAttachments : [];
+  const attachLabels = fa
+    .map((x) => {
+      if (typeof x !== "object" || x === null) {
+        return null;
+      }
+      const o = x as { filename?: unknown; url?: unknown };
+      if (typeof o.filename === "string" && o.filename.trim()) {
+        return o.filename.trim();
+      }
+      if (typeof o.url === "string" && o.url.length > 0) {
+        return o.url.length > 64 ? `${o.url.slice(0, 64)}…` : o.url;
+      }
+      return null;
+    })
+    .filter((s): s is string => s != null && s.length > 0);
+  const fileNote =
+    attachLabels.length > 0 ? ` attachments=${attachLabels.join(", ")}` : "";
   return {
     type: "text",
-    text: `[Assistant bubble id=${bubbleId}${threadsTo}${userReactions}] ${d.text}`,
+    text: `[Assistant bubble id=${bubbleId}${threadsTo}${userReactions}${fileNote}] ${d.text}`,
   };
 }
 

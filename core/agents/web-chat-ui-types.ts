@@ -1,4 +1,5 @@
-import type { UIMessage } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
+import { stripOuterQuotes } from "@/lib/file-url-to-buffer";
 import type { AgentUserMessageMetadata } from "@/core/agents/message-metadata";
 
 /** One human reaction on an assistant bubble (synced via POST /api/chat/reaction). */
@@ -9,6 +10,13 @@ export type WebChatUserReaction = {
   avatarUrl?: string;
 };
 
+/** Assistant-shared files (same shape as `FileUIPart` without `type`). */
+export type WebChatBubbleFileAttachment = {
+  url: string;
+  filename?: string;
+  mediaType: string;
+};
+
 /** Custom data parts for web chat (`data-${key}`). */
 export type WebChatDataTypes = {
   "chat-bubble": {
@@ -16,12 +24,16 @@ export type WebChatDataTypes = {
     replyToMessageId?: string;
     /** Reactions users added under this assistant bubble. */
     userReactions?: WebChatUserReaction[];
+    /** Files the assistant attaches (URLs must be browser-reachable). */
+    fileAttachments?: WebChatBubbleFileAttachment[];
   };
   "chat-reaction": {
     targetUserMessageId: string;
     emoji: string;
   };
 };
+
+export type WebChatBubbleData = WebChatDataTypes["chat-bubble"];
 
 export type AppWebUIMessage = UIMessage<
   AgentUserMessageMetadata,
@@ -86,4 +98,18 @@ export function collectAgentReactionsOnUserMessage(
     }
   }
   return ordered;
+}
+
+export function webChatBubbleFileAttachmentsToFileParts(
+  attachments: WebChatBubbleFileAttachment[] | undefined,
+): FileUIPart[] {
+  if (!attachments?.length) {
+    return [];
+  }
+  return attachments.map((a) => ({
+    type: "file",
+    url: stripOuterQuotes(a.url.trim()),
+    filename: a.filename?.trim(),
+    mediaType: a.mediaType.trim(),
+  }));
 }

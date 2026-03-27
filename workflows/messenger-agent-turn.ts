@@ -12,16 +12,22 @@ import {
   CHANNEL_AGENT_INSTRUCTIONS,
   MESSENGER_AGENT_BASE_INSTRUCTIONS,
 } from "@/core/agents/channel-instructions";
+import { expandFilePartsForAiGateway } from "@/core/agents/web-chat-file-parts-for-model";
 import { injectUserMessageContextForModel } from "@/core/agents/inject-user-message-context";
-import { optionalReplyToMessageIdSchema } from "@/core/agents/tool-schemas";
+import { sendChatMessageToolInputSchema } from "@/core/agents/tool-schemas";
+import type { WebChatBubbleFileAttachment } from "@/core/agents/web-chat-ui-types";
 import {
   webChatBubbleDataPartToTextPart,
   webChatReactionDataPartToTextPart,
 } from "@/core/agents/web-chat-model-parts";
 import { appendAssistantBubble } from "@/core/conversations/store";
+import {
+  createSpreadsheetFileInputSchema,
+  type CreateSpreadsheetFileInput,
+} from "@/core/files/spreadsheet-schema";
 import { dispatchOutbound } from "@/core/outbound/dispatch";
 
-const WEB_UI_INSTRUCTIONS = `${MESSENGER_AGENT_BASE_INSTRUCTIONS} You are in a web chat in the browser. Each user turn starts with [User message id=…]. Each assistant bubble in history appears as a line starting with [Assistant bubble id=…]. For send_chat_message.replyToMessageId, copy that exact id string only (user message id or assistant bubble id). Never invent ids or quoted text the user did not send; omit replyToMessageId when not threading. You may call set_message_reaction with externalMessageId from [Conversation context] (the user's external message id line) when a single emoji reaction fits; use one Unicode emoji only.`;
+const WEB_UI_INSTRUCTIONS = `${MESSENGER_AGENT_BASE_INSTRUCTIONS} Web chat: user lines start with [User message id=…]; assistant history uses [Assistant bubble id=…]. Use those exact strings for send_chat_message.replyToMessageId only when threading; omit otherwise. Never invent ids. User file uploads appear as plain text blocks [User attached file: …] or [User attached spreadsheet: …] — read and use that content. set_message_reaction: target id from [Conversation context], one Unicode emoji (empty string removes your reaction).`;
 
 function resolveModelId(): string {
   return process.env.AGENT_MODEL?.trim() || "openai/gpt-4o-mini";
@@ -40,6 +46,7 @@ async function messengerSendChatMessageStep(params: {
   externalChatId: string;
   text: string;
   replyToMessageId?: string;
+  attachments?: WebChatBubbleFileAttachment[];
   toolCallId: string;
 }): Promise<{ ok: true }> {
   "use step";
@@ -49,14 +56,22 @@ async function messengerSendChatMessageStep(params: {
     externalChatId,
     text,
     replyToMessageId,
+    attachments,
     toolCallId,
   } = params;
   if (streamUiBubbles) {
     const w = getWritable<UIMessageChunk>();
     const writer = w.getWriter();
-    const bubbleData: { text: string; replyToMessageId?: string } = { text };
+    const bubbleData: {
+      text: string;
+      replyToMessageId?: string;
+      fileAttachments?: WebChatBubbleFileAttachment[];
+    } = { text };
     if (replyToMessageId != null) {
       bubbleData.replyToMessageId = replyToMessageId;
+    }
+    if (attachments != null && attachments.length > 0) {
+      bubbleData.fileAttachments = attachments;
     }
     const chunk: UIMessageChunk = {
       type: "data-chat-bubble",
@@ -66,20 +81,41 @@ async function messengerSendChatMessageStep(params: {
     await writer.write(chunk);
     writer.releaseLock();
   } else {
+    let outboundText = text.trim();
+    if (attachments != null && attachments.length > 0) {
+      const lines = attachments.map((a) => {
+        const label = a.filename?.trim() || "file";
+        return `${label}: ${a.url}`;
+      });
+      outboundText =
+        outboundText.length > 0
+          ? `${outboundText}\n\n${lines.join("\n")}`
+          : lines.join("\n");
+    }
     await dispatchOutbound({
       installationId,
       target: { externalChatId },
       payload: {
         kind: "text",
-        text,
+        text: outboundText,
         ...(replyToMessageId != null
           ? { replyToExternalMessageId: replyToMessageId }
           : {}),
       },
     });
-    appendAssistantBubble(installationId, externalChatId, text);
+    appendAssistantBubble(installationId, externalChatId, outboundText);
   }
   return { ok: true as const };
+}
+
+async function messengerCreateSpreadsheetFileStep(
+  input: CreateSpreadsheetFileInput,
+) {
+  "use step";
+  const { persistSpreadsheetAttachment } = await import(
+    "@/core/files/persist-spreadsheet",
+  );
+  return persistSpreadsheetAttachment(input);
 }
 
 async function messengerSetMessageReactionStep(params: {
@@ -145,6 +181,14 @@ function typingPauseTool() {
   });
 }
 
+function createSpreadsheetFileTool() {
+  return tool({
+    description: "Build a .xlsx (input schema defines shape).",
+    inputSchema: createSpreadsheetFileInputSchema,
+    execute: async (input) => messengerCreateSpreadsheetFileStep(input),
+  });
+}
+
 /** Web channel: bubbles via UI stream (data-chat-bubble chunks). */
 export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
   "use workflow";
@@ -152,26 +196,19 @@ export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
   const writable = getWritable<UIMessageChunk>();
   const tools = {
     typing_pause: typingPauseTool(),
+    create_spreadsheet_file: createSpreadsheetFileTool(),
     send_chat_message: tool({
       description:
         "Send one chat bubble to the user. Call once per bubble; use multiple calls for multiple bubbles.",
-      inputSchema: z.object({
-        text: z
-          .string()
-          .min(1)
-          .max(4096)
-          .describe("A single short message bubble."),
-        replyToMessageId: optionalReplyToMessageIdSchema.describe(
-          "Exact target id: from [Conversation context] or [Assistant bubble id=…] only.",
-        ),
-      }),
-      execute: async ({ text, replyToMessageId }, { toolCallId }) =>
+      inputSchema: sendChatMessageToolInputSchema,
+      execute: async ({ text, replyToMessageId, attachments }, { toolCallId }) =>
         messengerSendChatMessageStep({
           streamUiBubbles: true,
           installationId: input.installationId,
           externalChatId: input.externalChatId,
           text,
           ...(replyToMessageId != null ? { replyToMessageId } : {}),
+          ...(attachments != null ? { attachments } : {}),
           toolCallId,
         }),
     }),
@@ -209,7 +246,9 @@ export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
     tools,
   });
 
-  const baseMessages = injectUserMessageContextForModel(input.messages);
+  const baseMessages = await expandFilePartsForAiGateway(
+    injectUserMessageContextForModel(input.messages),
+  );
   const modelMessages = await convertToModelMessages(baseMessages, {
     convertDataPart: (part) =>
       webChatBubbleDataPartToTextPart(part) ??
@@ -230,26 +269,19 @@ export async function runChannelMessengerAgentTurn(input: MessengerAgentTurnInpu
   const writable = getWritable<UIMessageChunk>();
   const tools = {
     typing_pause: typingPauseTool(),
+    create_spreadsheet_file: createSpreadsheetFileTool(),
     send_chat_message: tool({
       description:
         "Send one chat bubble to the user. Call once per bubble; use multiple calls for multiple bubbles.",
-      inputSchema: z.object({
-        text: z
-          .string()
-          .min(1)
-          .max(4096)
-          .describe("A single short message bubble."),
-        replyToMessageId: optionalReplyToMessageIdSchema.describe(
-          "Optional id to thread this bubble (from [Conversation context] on the user message). Use exact values only.",
-        ),
-      }),
-      execute: async ({ text, replyToMessageId }, { toolCallId }) =>
+      inputSchema: sendChatMessageToolInputSchema,
+      execute: async ({ text, replyToMessageId, attachments }, { toolCallId }) =>
         messengerSendChatMessageStep({
           streamUiBubbles: false,
           installationId: input.installationId,
           externalChatId: input.externalChatId,
           text,
           ...(replyToMessageId != null ? { replyToMessageId } : {}),
+          ...(attachments != null ? { attachments } : {}),
           toolCallId,
         }),
     }),
@@ -287,7 +319,9 @@ export async function runChannelMessengerAgentTurn(input: MessengerAgentTurnInpu
     tools,
   });
 
-  const baseMessages = injectUserMessageContextForModel(input.messages);
+  const baseMessages = await expandFilePartsForAiGateway(
+    injectUserMessageContextForModel(input.messages),
+  );
   const modelMessages = await convertToModelMessages(baseMessages);
 
   await agent.stream({

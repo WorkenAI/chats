@@ -1,6 +1,27 @@
 {
   "version": "1.0.0",
   "steps": {
+    "node_modules/workflow/dist/stdlib.js": {
+      "fetch": {
+        "stepId": "step//workflow@4.2.0-beta.72//fetch"
+      }
+    },
+    "node_modules/@workflow/ai/dist/providers/gateway.js": {
+      "_anonymousStep0": {
+        "stepId": "step//@workflow/ai/gateway@4.1.0-beta.58//_anonymousStep0"
+      }
+    },
+    "workflows/messenger-agent-turn.ts": {
+      "messengerCreateSpreadsheetFileStep": {
+        "stepId": "step//./workflows/messenger-agent-turn//messengerCreateSpreadsheetFileStep"
+      },
+      "messengerSendChatMessageStep": {
+        "stepId": "step//./workflows/messenger-agent-turn//messengerSendChatMessageStep"
+      },
+      "messengerSetMessageReactionStep": {
+        "stepId": "step//./workflows/messenger-agent-turn//messengerSetMessageReactionStep"
+      }
+    },
     "node_modules/workflow/dist/internal/builtins.js": {
       "__builtin_response_array_buffer": {
         "stepId": "__builtin_response_array_buffer"
@@ -12,27 +33,14 @@
         "stepId": "__builtin_response_text"
       }
     },
-    "workflows/messenger-agent-turn.ts": {
-      "messengerSendChatMessageStep": {
-        "stepId": "step//./workflows/messenger-agent-turn//messengerSendChatMessageStep"
-      },
-      "messengerSetMessageReactionStep": {
-        "stepId": "step//./workflows/messenger-agent-turn//messengerSetMessageReactionStep"
-      }
-    },
-    "node_modules/workflow/dist/stdlib.js": {
-      "fetch": {
-        "stepId": "step//workflow@4.2.0-beta.72//fetch"
+    "node_modules/@workflow/ai/dist/agent/do-stream-step.js": {
+      "doStreamStep": {
+        "stepId": "step//@workflow/ai@4.1.0-beta.58//doStreamStep"
       }
     },
     "node_modules/@workflow/ai/dist/agent/stream-text-iterator.js": {
       "writeToolOutputToUI": {
         "stepId": "step//@workflow/ai@4.1.0-beta.58//writeToolOutputToUI"
-      }
-    },
-    "node_modules/@workflow/ai/dist/providers/gateway.js": {
-      "_anonymousStep0": {
-        "stepId": "step//@workflow/ai/gateway@4.1.0-beta.58//_anonymousStep0"
       }
     },
     "node_modules/@workflow/ai/dist/agent/durable-agent.js": {
@@ -44,11 +52,6 @@
       },
       "writeFinishChunk": {
         "stepId": "step//@workflow/ai/agent@4.1.0-beta.58//writeFinishChunk"
-      }
-    },
-    "node_modules/@workflow/ai/dist/agent/do-stream-step.js": {
-      "doStreamStep": {
-        "stepId": "step//@workflow/ai@4.1.0-beta.58//doStreamStep"
       }
     }
   },

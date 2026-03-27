@@ -25,6 +25,9 @@ const NEW_TITLE = "New chat";
 
 type ChatUIMessage = AppWebUIMessage;
 
+/** Stable fallback so `useChat` is not fed a new `[]` every render (infinite sync loop). */
+const EMPTY_THREAD_MESSAGES: ChatUIMessage[] = [];
+
 function makeThread(): ThreadRow {
   return { id: crypto.randomUUID(), title: NEW_TITLE };
 }
@@ -128,14 +131,23 @@ export default function ChatPage() {
 
   const handleThreadMessagesChange = useCallback(
     (threadId: string, messages: ChatUIMessage[]) => {
-      setThreadMessages((prev) => ({ ...prev, [threadId]: messages }));
+      setThreadMessages((prev) => {
+        if (prev[threadId] === messages) {
+          return prev;
+        }
+        return { ...prev, [threadId]: messages };
+      });
       const previewAvatarUrl =
         inferThreadPreviewAvatarFromMessages(messages);
-      setThreads((prev) =>
-        prev.map((t) =>
+      setThreads((prev) => {
+        const row = prev.find((t) => t.id === threadId);
+        if (row?.previewAvatarUrl === previewAvatarUrl) {
+          return prev;
+        }
+        return prev.map((t) =>
           t.id === threadId ? { ...t, previewAvatarUrl } : t,
-        ),
-      );
+        );
+      });
     },
     [],
   );
@@ -202,7 +214,8 @@ export default function ChatPage() {
     );
   }, [activeId]);
 
-  const storedMessages = threadMessages[activeId] ?? [];
+  const storedMessages =
+    threadMessages[activeId] ?? EMPTY_THREAD_MESSAGES;
   const activeThread = threads.find((t) => t.id === activeId);
   const activeTitle = activeThread?.title ?? NEW_TITLE;
 

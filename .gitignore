@@ -23,6 +23,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 
+# agent-uploaded files (local dev / single-node)
+.data
+
 # caches
 .eslintcache
 .cache
