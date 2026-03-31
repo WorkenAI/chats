@@ -1,21 +1,21 @@
 # Chat (ingress + durable agent)
 
-Next.js-приложение: единый webhook для коннекторов, очередь Vercel, durable-workflow с агентом (Vercel AI Gateway) и ответами в мессенджер «как человек» (паузы, несколько пузырей).
+Next.js app: a single webhook for connectors, a Vercel queue, a durable workflow with an agent (Vercel AI Gateway), and messenger replies that feel human (pauses, multiple bubbles).
 
-**Веб-чат:** страница [`/chat`](app/chat/page.tsx) и `POST /api/chat` — тот же паттерн агента (`typing_pause`, несколько `send_chat_message`), но ответы стримятся в UI как `data-chat-bubble`, без Telegram.
+**Web chat:** [`/chat`](app/chat/page.tsx) and `POST /api/chat` — same agent pattern (`typing_pause`, multiple `send_chat_message`), but responses stream to the UI as `data-chat-bubble` events, not Telegram.
 
-## Архитектура
+## Architecture
 
 ```mermaid
 flowchart TB
-  subgraph external [Внешний мир]
-    TG[Telegram / другие каналы]
+  subgraph external [External world]
+    TG[Telegram / other channels]
     VQ[(Vercel Queue)]
     GW[Vercel AI Gateway]
   end
 
-  subgraph browser [Клиент]
-    BR[Браузер /chat]
+  subgraph browser [Client]
+    BR[Browser /chat]
   end
 
   subgraph next [Next.js]
@@ -42,7 +42,7 @@ flowchart TB
   TG -->|webhook| WH
   WH --> PL
   PL --> REG
-  PL -->|по умолчанию| ENQ
+  PL -->|default| ENQ
   PL -->|INGRESS_SYNC=1| ING
   ENQ --> VQ
   VQ --> QC
@@ -56,19 +56,13 @@ flowchart TB
   DP --> TG
 ```
 
-Два workflow: **`runChannelAgentTurn`** (Telegram через `dispatchOutbound`) и **`runWebChatTurn`** (пузыри в SSE как `data-chat-bubble`). Одинаковые инструкции и инструменты `typing_pause` / `send_chat_message`.
+Two workflows: **`runChannelAgentTurn`** (Telegram via `dispatchOutbound`) and **`runWebChatTurn`** (bubbles over SSE as `data-chat-bubble`). Same instructions and tools: `typing_pause` / `send_chat_message`.
 
-</think>
-
-
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-Read
-
-### Поток входящего сообщения
+## Incoming message flow
 
 ```mermaid
 sequenceDiagram
-  participant C as Канал
+  participant C as Channel
   participant W as Webhook route
   participant P as Pipeline
   participant D as Driver
@@ -85,7 +79,7 @@ sequenceDiagram
   W->>P: installation + body
   P->>D: verify + normalize
   D-->>P: InboundEvent[]
-  alt очередь
+  alt queue
     P->>Q: send(topic, event)
     Q->>H: deliver
     H->>I: ingestInboundEvent
@@ -99,56 +93,56 @@ sequenceDiagram
     A->>G: LLM + tools
     A->>A: sleep (typing_pause)
     A->>O: send_chat_message step
-    O->>C: API канала
+    O->>C: channel API
   end
 ```
 
-## Ключевые идеи
+## Key ideas
 
-- **Один inbound-route** на все установки: тип канала определяется по `connectorKind` и registry ([`docs/ingress/generic-webhook-dispatch.md`](docs/ingress/generic-webhook-dispatch.md)).
-- **Очередь** буферизует нормализованные события (`inbound-events`), consumer вызывает ingest с ретраями.
-- **Агент** — два workflow с одной логикой: `runChannelAgentTurn` (Telegram) и `runWebChatTurn` (браузер); модель через **Vercel AI Gateway** (`gateway()`), тулы `send_chat_message` и `typing_pause` + `sleep()` из Workflow.
+- **One inbound route** for all installations: channel type comes from `connectorKind` and the registry ([`docs/ingress/generic-webhook-dispatch.md`](docs/ingress/generic-webhook-dispatch.md)).
+- The **queue** buffers normalized events (`inbound-events`); the consumer calls ingest with retries.
+- The **agent** is two workflows with one logic: `runChannelAgentTurn` (Telegram) and `runWebChatTurn` (browser); model via **Vercel AI Gateway** (`gateway()`), tools `send_chat_message` and `typing_pause` + `sleep()` from Workflow.
 
-## Структура репозитория (сокращённо)
+## Repository layout (abbreviated)
 
 ```
-app/chat/                                          # UI чата с агентом
+app/chat/                                          # Chat UI with agent
 app/api/chat/                                      # POST: start(runWebChatTurn) + SSE
-app/api/integrations/[installationId]/webhook/   # единый webhook
-app/api/queues/process-inbound/                    # consumer inbound-events
-core/connectors/                                   # типы, registry
-core/inbound/                                      # pipeline, enqueue, ingest, dedupe
-core/outbound/                                     # dispatch
-core/conversations/                                # in-memory история (заменить на БД)
-core/agents/                                       # инструкции агента, проверка Gateway
-drivers/                                           # telegram и др.
-workflows/channel-agent-turn.ts                    # агент → Telegram
-workflows/web-chat-turn.ts                         # агент → UI stream
+app/api/integrations/[installationId]/webhook/   # Single webhook
+app/api/queues/process-inbound/                    # inbound-events consumer
+core/connectors/                                   # Types, registry
+core/inbound/                                      # Pipeline, enqueue, ingest, dedupe
+core/outbound/                                     # Dispatch
+core/conversations/                                # In-memory history (replace with DB)
+core/agents/                                       # Agent instructions, Gateway checks
+drivers/                                           # Telegram, etc.
+workflows/channel-agent-turn.ts                    # Agent → Telegram
+workflows/web-chat-turn.ts                         # Agent → UI stream
 docs/                                              # architecture, runtime, product UX, ingress, workflow ([index](docs/README.md))
-tests/integration/                                 # реальный вызов Gateway (опционально)
+tests/integration/                                 # Real Gateway call (optional)
 ```
 
-## Переменные окружения
+## Environment variables
 
-| Переменная | Назначение |
-|------------|------------|
-| `AI_GATEWAY_API_KEY` | Локально: доступ к [Vercel AI Gateway](https://vercel.com/docs/ai-gateway). На Vercel можно полагаться на OIDC без ключа. |
-| `AGENT_MODEL` | ID модели Gateway, например `openai/gpt-4o-mini` (по умолчанию). |
-| `TELEGRAM_BOT_TOKEN` | Для outbound demo-установки и реального Telegram. |
-| `INGRESS_SYNC=1` | Пропустить очередь, вызывать ingest в том же запросе (отладка). |
+| Variable | Purpose |
+|----------|---------|
+| `AI_GATEWAY_API_KEY` | Local: access to [Vercel AI Gateway](https://vercel.com/docs/ai-gateway). On Vercel you can rely on OIDC without a key. |
+| `AGENT_MODEL` | Gateway model id, e.g. `openai/gpt-4o-mini` (default). |
+| `TELEGRAM_BOT_TOKEN` | For the outbound demo installation and real Telegram. |
+| `INGRESS_SYNC=1` | Skip the queue; call ingest in the same request (debugging). |
 
-## Скрипты
+## Scripts
 
 ```bash
 bun install
 bun run dev          # Next.js
-bun test             # юнит-тесты
-bun run test:agent   # интеграция с реальным Gateway (нужен AI_GATEWAY_API_KEY)
-bun run test:agent:local  # то же + .env.local
+bun test             # Unit tests
+bun run test:agent   # Integration with real Gateway (needs AI_GATEWAY_API_KEY)
+bun run test:agent:local  # Same + .env.local
 ```
 
-## Документация в репозитории
+## Documentation in this repo
 
-- [docs/README.md](docs/README.md) — оглавление.
-- [docs/ingress/generic-webhook-dispatch.md](docs/ingress/generic-webhook-dispatch.md) — единый webhook, registry, dispatch.
+- [docs/README.md](docs/README.md) — table of contents.
+- [docs/ingress/generic-webhook-dispatch.md](docs/ingress/generic-webhook-dispatch.md) — single webhook, registry, dispatch.
 - [docs/workflow/single-turn-agent.md](docs/workflow/single-turn-agent.md) — single-turn + DurableAgent.
