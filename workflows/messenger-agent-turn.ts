@@ -2,18 +2,24 @@ import { DurableAgent } from "@workflow/ai/agent";
 import { gateway } from "@workflow/ai/gateway";
 import {
   convertToModelMessages,
+  generateObject,
   tool,
+  type ModelMessage,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
-import { getWritable, sleep } from "workflow";
-import { z } from "zod";
+import { getWritable } from "workflow";
 import {
-  CHANNEL_AGENT_INSTRUCTIONS,
-  MESSENGER_AGENT_BASE_INSTRUCTIONS,
+  CHANNEL_MESSENGER_FRONTEND_INSTRUCTIONS,
+  MESSENGER_PLANNER_INSTRUCTIONS,
+  WEB_MESSENGER_FRONTEND_INSTRUCTIONS,
 } from "@/core/agents/channel-instructions";
 import { expandFilePartsForAiGateway } from "@/core/agents/web-chat-file-parts-for-model";
 import { injectUserMessageContextForModel } from "@/core/agents/inject-user-message-context";
+import {
+  messengerPlannerOutputSchema,
+  type MessengerPlannerOutput,
+} from "@/core/agents/messenger-planner-schema";
 import { sendChatMessageToolInputSchema } from "@/core/agents/tool-schemas";
 import type { WebChatBubbleFileAttachment } from "@/core/agents/web-chat-ui-types";
 import {
@@ -26,8 +32,6 @@ import {
   type CreateSpreadsheetFileInput,
 } from "@/core/files/spreadsheet-schema";
 import { dispatchOutbound } from "@/core/outbound/dispatch";
-
-const WEB_UI_INSTRUCTIONS = `${MESSENGER_AGENT_BASE_INSTRUCTIONS} Web chat: user lines start with [User message id=…]; assistant history uses [Assistant bubble id=…]. Use those exact strings for send_chat_message.replyToMessageId only when threading; omit otherwise. Never invent ids. User file uploads appear as plain text blocks [User attached file: …] or [User attached spreadsheet: …] — read and use that content. set_message_reaction: target id from [Conversation context], one Unicode emoji (empty string removes your reaction).`;
 
 function resolveModelId(): string {
   return process.env.AGENT_MODEL?.trim() || "openai/gpt-4o-mini";
@@ -162,23 +166,21 @@ async function messengerSetMessageReactionStep(params: {
   return { ok: true as const };
 }
 
-function typingPauseTool() {
-  return tool({
-    description:
-      "Pause like a human thinking or typing before the next bubble. Call before most send_chat_message calls.",
-    inputSchema: z.object({
-      durationMs: z
-        .number()
-        .int()
-        .min(250)
-        .max(15000)
-        .describe("How long to wait in milliseconds."),
-    }),
-    execute: async ({ durationMs }) => {
-      await sleep(durationMs);
-      return { ok: true as const, pausedMs: durationMs };
-    },
+async function runMessengerPlannerStep(
+  messages: ModelMessage[],
+): Promise<MessengerPlannerOutput> {
+  "use step";
+  const model = await gateway(resolveModelId())();
+  const { object } = await generateObject({
+    model,
+    system: MESSENGER_PLANNER_INSTRUCTIONS,
+    messages,
+    schema: messengerPlannerOutputSchema,
+    schemaName: "MessengerPlannerDecision",
+    schemaDescription:
+      "Whether to ignore, reply, follow up with multiple bubbles, react only, optional reaction and reply targeting.",
   });
+  return object;
 }
 
 function createSpreadsheetFileTool() {
@@ -189,13 +191,8 @@ function createSpreadsheetFileTool() {
   });
 }
 
-/** Web channel: bubbles via UI stream (data-chat-bubble chunks). */
-export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
-  "use workflow";
-
-  const writable = getWritable<UIMessageChunk>();
-  const tools = {
-    typing_pause: typingPauseTool(),
+function buildFrontendTools(input: MessengerAgentTurnInput, streamUiBubbles: boolean) {
+  return {
     create_spreadsheet_file: createSpreadsheetFileTool(),
     send_chat_message: tool({
       description:
@@ -203,7 +200,7 @@ export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
       inputSchema: sendChatMessageToolInputSchema,
       execute: async ({ text, replyToMessageId, attachments }, { toolCallId }) =>
         messengerSendChatMessageStep({
-          streamUiBubbles: true,
+          streamUiBubbles,
           installationId: input.installationId,
           externalChatId: input.externalChatId,
           text,
@@ -212,47 +209,94 @@ export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
           toolCallId,
         }),
     }),
-    set_message_reaction: tool({
-      description:
-        "Set or remove an emoji reaction on the user's message. Use the external message id from [Conversation context].",
-      inputSchema: z.object({
-        externalMessageId: z
-          .string()
-          .min(1)
-          .describe(
-            "Target message id from [Conversation context] (external message id line).",
-          ),
-        emoji: z
-          .string()
-          .describe(
-            "One standard emoji to set, or empty string to remove your reaction on that message.",
-          ),
-      }),
-      execute: async ({ externalMessageId, emoji }, { toolCallId }) =>
-        messengerSetMessageReactionStep({
-          streamUiBubbles: true,
-          installationId: input.installationId,
-          externalChatId: input.externalChatId,
-          externalMessageId,
-          emoji,
-          toolCallId,
-        }),
-    }),
   };
+}
 
-  const agent = new DurableAgent({
-    model: gateway(resolveModelId()),
-    instructions: WEB_UI_INSTRUCTIONS,
-    tools,
+async function maybeApplyPlannerReaction(params: {
+  plan: MessengerPlannerOutput;
+  streamUiBubbles: boolean;
+  installationId: string;
+  externalChatId: string;
+}): Promise<void> {
+  const { plan, streamUiBubbles, installationId, externalChatId } = params;
+  const r = plan.reaction;
+  if (r == null) {
+    return;
+  }
+  await messengerSetMessageReactionStep({
+    streamUiBubbles,
+    installationId,
+    externalChatId,
+    externalMessageId: r.externalMessageId,
+    emoji: r.emoji,
+    toolCallId: "planner-reaction-" + crypto.randomUUID(),
   });
+}
 
+async function buildPlannerMessages(baseMessages: UIMessage[]): Promise<ModelMessage[]> {
+  const history = await convertToModelMessages(baseMessages);
+  return [
+    ...history,
+    {
+      role: "user",
+      content:
+        "Decide how to handle the conversation above. Output the planner decision via the schema.",
+    },
+  ];
+}
+
+function buildFrontendSystem(
+  frontendInstructions: string,
+  plan: MessengerPlannerOutput,
+): string {
+  return `${frontendInstructions}\n\n[Planner decision]\n${JSON.stringify(plan)}`;
+}
+
+async function writeEmptyAssistantStream(
+  writable: WritableStream<UIMessageChunk>,
+): Promise<void> {
+  const writer = writable.getWriter();
+  await writer.write({
+    type: "start",
+    messageId: crypto.randomUUID(),
+  });
+  await writer.write({ type: "finish", finishReason: "stop" });
+  writer.releaseLock();
+}
+
+/** Web channel: bubbles via UI stream (data-chat-bubble chunks). */
+export async function runWebMessengerAgentTurn(input: MessengerAgentTurnInput) {
+  "use workflow";
+
+  const writable = getWritable<UIMessageChunk>();
   const baseMessages = await expandFilePartsForAiGateway(
     injectUserMessageContextForModel(input.messages),
   );
+  const plannerModelMessages = await buildPlannerMessages(baseMessages);
+  const plan = await runMessengerPlannerStep(plannerModelMessages);
+
+  await maybeApplyPlannerReaction({
+    plan,
+    streamUiBubbles: true,
+    installationId: input.installationId,
+    externalChatId: input.externalChatId,
+  });
+
+  if (plan.action === "ignore" || plan.action === "react_only") {
+    await writeEmptyAssistantStream(writable);
+    return;
+  }
+
   const modelMessages = await convertToModelMessages(baseMessages, {
     convertDataPart: (part) =>
       webChatBubbleDataPartToTextPart(part) ??
       webChatReactionDataPartToTextPart(part),
+  });
+
+  const agent = new DurableAgent({
+    model: gateway(resolveModelId()),
+    instructions: buildFrontendSystem(WEB_MESSENGER_FRONTEND_INSTRUCTIONS, plan),
+    tools: buildFrontendTools(input, true),
   });
 
   await agent.stream({
@@ -267,62 +311,31 @@ export async function runChannelMessengerAgentTurn(input: MessengerAgentTurnInpu
   "use workflow";
 
   const writable = getWritable<UIMessageChunk>();
-  const tools = {
-    typing_pause: typingPauseTool(),
-    create_spreadsheet_file: createSpreadsheetFileTool(),
-    send_chat_message: tool({
-      description:
-        "Send one chat bubble to the user. Call once per bubble; use multiple calls for multiple bubbles.",
-      inputSchema: sendChatMessageToolInputSchema,
-      execute: async ({ text, replyToMessageId, attachments }, { toolCallId }) =>
-        messengerSendChatMessageStep({
-          streamUiBubbles: false,
-          installationId: input.installationId,
-          externalChatId: input.externalChatId,
-          text,
-          ...(replyToMessageId != null ? { replyToMessageId } : {}),
-          ...(attachments != null ? { attachments } : {}),
-          toolCallId,
-        }),
-    }),
-    set_message_reaction: tool({
-      description:
-        "Set or remove an emoji reaction on the user's message. Use the external message id from [Conversation context].",
-      inputSchema: z.object({
-        externalMessageId: z
-          .string()
-          .min(1)
-          .describe(
-            "Target message id from [Conversation context] (external message id line).",
-          ),
-        emoji: z
-          .string()
-          .describe(
-            "One standard emoji to set, or empty string to remove your reaction on that message.",
-          ),
-      }),
-      execute: async ({ externalMessageId, emoji }, { toolCallId }) =>
-        messengerSetMessageReactionStep({
-          streamUiBubbles: false,
-          installationId: input.installationId,
-          externalChatId: input.externalChatId,
-          externalMessageId,
-          emoji,
-          toolCallId,
-        }),
-    }),
-  };
-
-  const agent = new DurableAgent({
-    model: gateway(resolveModelId()),
-    instructions: CHANNEL_AGENT_INSTRUCTIONS,
-    tools,
-  });
-
   const baseMessages = await expandFilePartsForAiGateway(
     injectUserMessageContextForModel(input.messages),
   );
+  const plannerModelMessages = await buildPlannerMessages(baseMessages);
+  const plan = await runMessengerPlannerStep(plannerModelMessages);
+
+  await maybeApplyPlannerReaction({
+    plan,
+    streamUiBubbles: false,
+    installationId: input.installationId,
+    externalChatId: input.externalChatId,
+  });
+
+  if (plan.action === "ignore" || plan.action === "react_only") {
+    await writeEmptyAssistantStream(writable);
+    return;
+  }
+
   const modelMessages = await convertToModelMessages(baseMessages);
+
+  const agent = new DurableAgent({
+    model: gateway(resolveModelId()),
+    instructions: buildFrontendSystem(CHANNEL_MESSENGER_FRONTEND_INSTRUCTIONS, plan),
+    tools: buildFrontendTools(input, false),
+  });
 
   await agent.stream({
     messages: modelMessages,
